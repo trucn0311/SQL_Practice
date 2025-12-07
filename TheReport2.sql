@@ -1,47 +1,24 @@
--- OUTER QUERY: The final SELECT statement
 SELECT 
-    -- 1. Conditional Naming (Equivalent to CASE WHEN G.Grade >= 8 THEN S.Name ELSE 'NULL' END)
-    -- This handles the requirement to display "NULL" for students with Grade < 8.
-    IF(g >= 8, sub.Name, 'NULL') AS n,
-    
-    -- 2. Select the calculated Grade
-    g, 
-    
-    -- 3. Select the student's raw Marks
-    sub.Marks
-    
-FROM
-    -- INNER SUBQUERY (s): This calculates the grade for every student first.
-    (
-        SELECT 
-            Students.Name, 
-            
-            -- This is the Scalar Subquery: It executes for every student row, 
-            -- performing an implicit join (correlation) to find the single matching Grade.
-            (
-                SELECT grades.grade 
-                FROM grades 
-                -- Correlation: Links the current student's Marks to the appropriate grade range
-                WHERE students.marks >= grades.min_mark 
-                  AND students.marks <= grades.max_mark
-            ) AS g, -- Alias 'g' is the calculated Grade
-            
-            Students.Marks
-        FROM Students -- Driving table
-    ) AS sub -- Alias the result set as 's'
-
--- FINAL ORDERING: Achieves the complex, conditional sorting using three simple keys.
+-- This handles the requirement to display "NULL" for students with Grade < 8.
+    --    If Grade is 8 or higher, display the student's Name.
+    --    Otherwise (Grade 1-7), display the string literal 'NULL'.
+(case when g.grade <8 THEN NULL ELSE name END), g.grade, s.marks
+FROM students s
+-- Standard JOIN: Link every student to the correct grade range
+JOIN grades g ON s.marks >= g.min_mark AND 
+                 s.marks <= g.max_mark
 ORDER BY 
-    -- Key 1: Primary Sort
-    -- Puts students with higher grades first (e.g., Grade 10, then 9, then 8).
-    g DESC, 
-    
-    -- Key 2: Secondary Sort (The clever part for names/separation)
-    -- a) For Grade >= 8, it sorts by the actual name alphabetically (ASC).
-    -- b) For Grade < 8 (where 'n' is "NULL"), it pushes these rows to the end of the current grade group.
-    n ASC, 
-    
-    -- Key 3: Tertiary Sort
-    -- This key only takes effect when both Grade (g) and Name (n) are tied (i.e., when n = "NULL").
-    -- This correctly orders the low-grade students (Grade < 8) by their Marks (ASC).
-    sub.Marks ASC;
+-- Key 1: Primary Order - Sort by Grade (DESC). This puts Grade 10 first, then 9, etc.
+g.grade DESC, 
+
+-- Key 2: Secondary Order (for all rows) - Sort by the result of the conditional naming.
+    -- This handles the two conflicting requirements:
+    --   A. For high grades (8-10, where StudentName is the actual name): sorts names alphabetically (ASC).
+    --   B. For low grades (1-7, where StudentName is 'NULL'): pushes the identical 'NULL' values 
+s.name ASC, 
+
+ -- Key 3: Tertiary Order - Sort by Marks (ASC).
+    -- This only activates when both Grade and StudentName are tied (i.e., for the low-grade students who are all 'NULL'). 
+    -- This satisfies the requirement to order low-grade students 
+    -- by ascending Marks.
+s.marks ASC
